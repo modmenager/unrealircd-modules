@@ -10,17 +10,18 @@
  */
 
 /*** <<<MODULE MANAGER START>>>
-module {
-    documentation "https://github.com/modmenager/unrealircd-modules/blob/main/README.md";
-    troubleshooting "In caso di problemi con il modulo m_rootchannel, Contatta Server Su Irc.albnetwork.org.";
-    min-unrealircd-version "6.1.*";
-    max-unrealircd-version "6.2.*";
+module
+{
+    documentation "https://github.com"
+    troubleshooting "In caso di problemi con il modulo m_rootchannel, Contatta Server Su Irc.albnetwork.org."
+    min-unrealircd-version "6.1.*"
+    max-unrealircd-version "6.2.*"
     post-install-text {
-        "Il modulo m_rootchannel e' stato installato con successo!";
-        "Ora aggiungi la seguente riga nel tuo file unrealircd.conf:";
-        "loadmodule \"third/m_rootchannel\";";
-        "Ricordati di creare il file 'conf/rootchannel.txt' inserendo il nome del canale da blindare (es. #root).";
-        "Infine, esegui /REHASH dal tuo client IRC per attivarlo.";
+        "Il modulo m_rootchannel e' stato installato con successo!"
+        "Ora aggiungi la seguente riga nel tuo file unrealircd.conf:"
+        "loadmodule \"third/m_rootchannel\";"
+        "Ricordati di creare il file 'conf/rootchannel.txt' inserendo il nome del canale da blindare (es. #root)."
+        "Infine, esegui /REHASH dal tuo client IRC per attivarlo."
     }
 }
 *** <<<MODULE MANAGER END>>>
@@ -126,7 +127,7 @@ int ed_esegui_blocco(CommandOverride *ovr, ClientContext *clictx, Client *client
 /* 0. OVERRIDE JOIN STANDARD: /JOIN <#canale> */
 void override_join(CommandOverride *ovr, ClientContext *clictx, Client *client, MessageTag *mtags, int parc, const char *parv[])
 {
-    /* Nel comando JOIN il canale è il primo parametro: parv */
+    /* Nel comando JOIN il canale Ã¨ il primo parametro: parv */
     const char *target_chan = (parc >= 2 && parv && parv[1]) ? parv[1] : NULL;
     ed_esegui_blocco(ovr, clictx, client, mtags, parc, parv, "JOIN", target_chan);
 }
@@ -134,7 +135,7 @@ void override_join(CommandOverride *ovr, ClientContext *clictx, Client *client, 
 /* 1. OVERRIDE SAJOIN: /SAJOIN <nick> <#canale> */
 void override_sajoin(CommandOverride *ovr, ClientContext *clictx, Client *client, MessageTag *mtags, int parc, const char *parv[])
 {
-    /* Nel comando SAJOIN il canale è il secondo parametro: parv */
+    /* Nel comando SAJOIN il canale Ã¨ il secondo parametro: parv */
     const char *target_chan = (parc >= 3 && parv && parv[2]) ? parv[2] : NULL;
     ed_esegui_blocco(ovr, clictx, client, mtags, parc, parv, "SAJOIN", target_chan);
 }
