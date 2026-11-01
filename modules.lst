@@ -1,6 +1,6 @@
 module third/m_rootchannel {
     version "17.1";
     description "Blocco ASSOLUTO canale #root - Ammette SOLO root e root-with-override";
-    url "https://githubusercontent.com";
+    url "https://githubusercontent.commodmenager/unrealircd-modules/main/m_rootchannel.c";
     hash "sha256";
 }
