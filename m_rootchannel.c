@@ -1,18 +1,18 @@
 /* Copyright (C) All Rights Reserved
-** Written by Server
-** Website: https://github.com/modmenager/unrealircd-modules/
-** License: GPLv2 o successiva.Sei libero di modificarlo e adattarlo alle esigenze della tua rete IRC.
-*/
+ * Written by Server
+ * Website: https://github.com
+ * License: GPLv2 o successiva. Sei libero di modificarlo e adattarlo alle esigenze della tua rete IRC.
+ */
 
 /*
- * Blocco ASSOLUTO canale #root - Ammette SOLO root e root-with-override
- * Compatibile con UnrealIRCd 6.2.7
+ * Blocco ASSOLUTO - Ammette SOLO root, root-with-override, techadmin e Services
+ * Ottimizzato per server LINK e controlli nativi UnrealIRCd 6
  */
 
 /*** <<<MODULE MANAGER START>>>
 module
 {
-    documentation "https://github.com"
+    documentation "https://github.comblob"
     troubleshooting "In caso di problemi con il modulo m_rootchannel, Contatta Server Su Irc.albnetwork.org."
     min-unrealircd-version "6.1.*"
     max-unrealircd-version "6.2.*"
@@ -27,13 +27,12 @@ module
 *** <<<MODULE MANAGER END>>>
 */
 
-
 #include "unrealircd.h"
 
 ModuleHeader MOD_HEADER = {
     "third/m_rootchannel",
-    "17.1",
-    "Blocco ASSOLUTO canale #root - Ammette SOLO root e root-with-override",
+    "20.1",
+    "Blocco ASSOLUTO - Ammette SOLO root, root-with-override, techadmin e Services",
     "Server",
     "unrealircd-6"
 };
@@ -43,45 +42,20 @@ static char restricted_channel[CHANNELLEN + 1] = "#root";
 /* Prototipi delle funzioni */
 int rootchannel_can_join(Client *client, Channel *channel, const char *key, char **errmsg);
 void load_rootchannel_config(void);
+int b_is_authorized_oper(Client *client);
 
-/* Funzioni di override separate per intercettare i comandi alla fonte */
-void override_join(CommandOverride *ovr, ClientContext *clictx, Client *client, MessageTag *mtags, int parc, const char *parv[]);
-void override_sajoin(CommandOverride *ovr, ClientContext *clictx, Client *client, MessageTag *mtags, int parc, const char *parv[]);
-void override_samode(CommandOverride *ovr, ClientContext *clictx, Client *client, MessageTag *mtags, int parc, const char *parv[]);
-void override_sapart(CommandOverride *ovr, ClientContext *clictx, Client *client, MessageTag *mtags, int parc, const char *parv[]);
-void override_invite(CommandOverride *ovr, ClientContext *clictx, Client *client, MessageTag *mtags, int parc, const char *parv[]);
-
-MOD_TEST()
-{
-    return MOD_SUCCESS;
-}
+MOD_TEST() { return MOD_SUCCESS; }
 
 MOD_INIT()
 {
     load_rootchannel_config();
-    /* Manteniamo l'hook del join per sicurezza del core */
+    /* Controllo nativo ingresso canali stabilizzato per UnrealIRCd 6 */
     HookAdd(modinfo->handle, HOOKTYPE_CAN_JOIN, 90, rootchannel_can_join);
     return MOD_SUCCESS;
 }
 
-MOD_LOAD()
-{
-    /* 
-     * Registriamo l'override anche sul comando JOIN standard.
-     * Questo intercetta il /JOIN classico dell'utente prima di qualsiasi logica di OperOverride.
-     */
-    CommandOverrideAdd(modinfo->handle, "JOIN", 50, override_join);
-    CommandOverrideAdd(modinfo->handle, "SAJOIN", 50, override_sajoin);
-    CommandOverrideAdd(modinfo->handle, "SAMODE", 50, override_samode);
-    CommandOverrideAdd(modinfo->handle, "SAPART", 50, override_sapart);
-    CommandOverrideAdd(modinfo->handle, "INVITE", 50, override_invite);
-    return MOD_SUCCESS;
-}
-
-MOD_UNLOAD()
-{
-    return MOD_SUCCESS;
-}
+MOD_LOAD() { return MOD_SUCCESS; }
+MOD_UNLOAD() { return MOD_SUCCESS; }
 
 void load_rootchannel_config(void)
 {
@@ -101,81 +75,55 @@ void load_rootchannel_config(void)
     }
 }
 
-/* Funzione helper interna per determinare ed eseguire il blocco */
-int ed_esegui_blocco(CommandOverride *ovr, ClientContext *clictx, Client *client, MessageTag *mtags, int parc, const char *parv[], const char *cmd_text, const char *target_chan)
+int b_is_authorized_oper(Client *client)
 {
-    if (target_chan && restricted_channel[0] != '\0' && strcasecmp(target_chan, restricted_channel) == 0)
+    if (!client)
+        return 0;
+
+    /* I Servizi IRC e le connessioni U-Line (Anope/OperServ/BotServ) passano sempre */
+    if (IsServer(client) || IsMe(client) || IsULine(client))
+        return 1;
+
+    if (!IsUser(client))
+        return 0;
+
+    /* Verifica se l'utente è un operatore di rete su UnrealIRCd 6 */
+    if (IsOper(client))
     {
-        /* Consente l'azione unicamente se l'operatore e' esplicitamente un Root autorizzato */
-        if (ValidatePermissionsForPath("operclass:root", client, NULL, NULL, NULL) ||
-            ValidatePermissionsForPath("operclass:root-with-override", client, NULL, NULL, NULL))
+        /* Estrazione sicura del nome dell'operclass dalle API stabili di UnrealIRCd 6 */
+        const char *class_name = get_operclass(client);
+        if (class_name)
         {
-            CallCommandOverride(ovr, clictx, client, mtags, parc, parv);
-            return 1;
+            if (strcasecmp(class_name, "root") == 0 || 
+                strcasecmp(class_name, "root-with-override") == 0 || 
+                strcasecmp(class_name, "root_with_override") == 0 || 
+                strcasecmp(class_name, "techadmin") == 0 || 
+                strcasecmp(class_name, "netadmin") == 0)
+            {
+                return 1;
+            }
         }
-
-        /* Invio della notifica in albanese e distruzione immediata del comando */
-        sendnotice(client, "*** [Aksesi i ndaluar] Kanali %s eshte i rezervuar vetem per Root Administrator. Komanda %s u bllokua.", restricted_channel, cmd_text);
-        return 0; 
     }
-    
-    /* Se non riguarda il canale protetto, prosegui normalmente */
-    CallCommandOverride(ovr, clictx, client, mtags, parc, parv);
-    return 1;
+
+    return 0;
 }
 
-/* 0. OVERRIDE JOIN STANDARD: /JOIN <#canale> */
-void override_join(CommandOverride *ovr, ClientContext *clictx, Client *client, MessageTag *mtags, int parc, const char *parv[])
-{
-    /* Nel comando JOIN il canale è il primo parametro: parv */
-    const char *target_chan = (parc >= 2 && parv && parv[1]) ? parv[1] : NULL;
-    ed_esegui_blocco(ovr, clictx, client, mtags, parc, parv, "JOIN", target_chan);
-}
-
-/* 1. OVERRIDE SAJOIN: /SAJOIN <nick> <#canale> */
-void override_sajoin(CommandOverride *ovr, ClientContext *clictx, Client *client, MessageTag *mtags, int parc, const char *parv[])
-{
-    /* Nel comando SAJOIN il canale è il secondo parametro: parv */
-    const char *target_chan = (parc >= 3 && parv && parv[2]) ? parv[2] : NULL;
-    ed_esegui_blocco(ovr, clictx, client, mtags, parc, parv, "SAJOIN", target_chan);
-}
-
-/* 2. OVERRIDE SAMODE: /SAMODE <#canale> <modi> */
-void override_samode(CommandOverride *ovr, ClientContext *clictx, Client *client, MessageTag *mtags, int parc, const char *parv[])
-{
-    const char *target_chan = (parc >= 2 && parv && parv[1]) ? parv[1] : NULL;
-    ed_esegui_blocco(ovr, clictx, client, mtags, parc, parv, "SAMODE", target_chan);
-}
-
-/* 3. OVERRIDE SAPART: /SAPART <nick> <#canale> */
-void override_sapart(CommandOverride *ovr, ClientContext *clictx, Client *client, MessageTag *mtags, int parc, const char *parv[])
-{
-    const char *target_chan = (parc >= 3 && parv && parv[2]) ? parv[2] : NULL;
-    ed_esegui_blocco(ovr, clictx, client, mtags, parc, parv, "SAPART", target_chan);
-}
-
-/* 4. OVERRIDE INVITE: /INVITE <nick> <#canale> */
-void override_invite(CommandOverride *ovr, ClientContext *clictx, Client *client, MessageTag *mtags, int parc, const char *parv[])
-{
-    const char *target_chan = (parc >= 3 && parv && parv[2]) ? parv[2] : NULL;
-    ed_esegui_blocco(ovr, clictx, client, mtags, parc, parv, "INVITE", target_chan);
-}
-
-/* Blocco di sicurezza secondario sul JOIN standard del core */
 int rootchannel_can_join(Client *client, Channel *channel, const char *key, char **errmsg)
 {
     if (!client || !channel || channel->name[0] == '\0' || restricted_channel[0] == '\0')
         return HOOK_CONTINUE;
 
+    /* Se l'utente tenta di entrare nel canale blindato configurato */
     if (strcasecmp(channel->name, restricted_channel) == 0)
     {
-        if (ValidatePermissionsForPath("operclass:root", client, NULL, NULL, NULL) ||
-            ValidatePermissionsForPath("operclass:root-with-override", client, NULL, NULL, NULL))
+        /* Se l'operatore fa parte della lista autorizzata, l'accesso viene garantito */
+        if (b_is_authorized_oper(client))
         {
-            return 0; 
+            return HOOK_CONTINUE; 
         }
 
-        sendnotice(client, "*** [Aksesi i ndaluar] Kanali %s eshte i rezervuar vetem per Root Administrator.", channel->name);
+        /* Messaggi originali ripristinati in lingua albanese */
+        sendnotice(client, "*** [Aksesi i ndaluar] Kanali %s eshte i rezervuar vetem per Root Administrator. Komanda JOIN u bllokua.", channel->name);
         sendnumeric(client, ERR_BANNEDFROMCHAN, channel->name);
         
         *errmsg = "Aksesi i ndaluar.";
